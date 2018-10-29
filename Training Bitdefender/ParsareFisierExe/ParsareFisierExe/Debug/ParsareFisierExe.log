@@ -1,3 +1,5 @@
 ﻿  main.c
-d:\facultate\training bitdefender\parsarefisierexe\parsarefisierexe\main.c(106): warning C4554: '&': check operator precedence for possible error; use parentheses to clarify precedence
-  ParsareFisierExe.vcxproj -> D:\Facultate\Training Bitdefender\ParsareFisierExe\Debug\ParsareFisierExe.exe
+c:\proiecte\training bitdefender\parsarefisierexe\parsarefisierexe\main.c(145): warning C4244: 'function': conversion from 'WORD' to 'BYTE', possible loss of data
+c:\proiecte\training bitdefender\parsarefisierexe\parsarefisierexe\main.c(153): warning C4244: 'function': conversion from 'WORD' to 'BYTE', possible loss of data
+c:\proiecte\training bitdefender\parsarefisierexe\parsarefisierexe\main.c(159): warning C4244: 'function': conversion from 'WORD' to 'BYTE', possible loss of data
+  ParsareFisierExe.vcxproj -> C:\proiecte\Training Bitdefender\ParsareFisierExe\Debug\ParsareFisierExe.exe

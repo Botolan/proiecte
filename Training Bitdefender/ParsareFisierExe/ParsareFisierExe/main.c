@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <windows.h>
 
+
+DWORD RVA2FA(DWORD RVA, IMAGE_SECTION_HEADER* pSec, BYTE nrSect);
+
+
 typedef struct {
 	HANDLE hFile;
 	HANDLE hMapping;
@@ -72,7 +76,9 @@ int parsePeFile(MAPPED_FILE *mf) {
 	IMAGE_DOS_HEADER *pDos = NULL;
 	IMAGE_NT_HEADERS *pNt = NULL;
 	IMAGE_SECTION_HEADER *pSec = NULL;
-	WORD nrSections;
+	IMAGE_EXPORT_DIRECTORY *pExD = NULL;
+	
+	BYTE nrSections;
 
 	if (mf->fileSize < sizeof(IMAGE_DOS_HEADER)) {
 		printf("Fisier prea mic.\n");
@@ -103,7 +109,7 @@ int parsePeFile(MAPPED_FILE *mf) {
 	nrSections = pNt->FileHeader.NumberOfSections;
 	printf("nrSections = %d\n", nrSections);
 	printf("characteristics = 0x%x\n", pNt->FileHeader.Characteristics);
-	if (pNt->FileHeader.Characteristics & IMAGE_FILE_DLL != 0) {
+	if ((pNt->FileHeader.Characteristics & IMAGE_FILE_DLL) != 0) {
 		printf("E DLL.\n");
 	}
 	else {
@@ -120,29 +126,78 @@ int parsePeFile(MAPPED_FILE *mf) {
 
 	for (BYTE bIndex = 0; bIndex < nrSections; bIndex++) {
 		printf("Informatii despre sectiunea numarul %d\n", bIndex + 1);
-		printf("	Numele sectiuni = %s\n", pSec->Name);
-		printf("	VirtualSize = %x\n", pSec->Misc.VirtualSize);
-		printf("	VirtualAddress = %x\n", pSec->VirtualAddress);
-		printf("	SizeOfRawData = %x\n", pSec->SizeOfRawData);
-		printf("	PointerToRawData = %x\n", pSec->PointerToRawData);
-		printf("	PointerToRelocation = %x\n", pSec->PointerToRelocations);
-		printf("	PointerToLinenumbers = %x\n", pSec->PointerToLinenumbers);
-		printf("	NumberOfRelocations = %x\n", pSec->NumberOfRelocations);
-		printf("	NumberOfLinenumbers = %x\n", pSec->NumberOfLinenumbers);
-		printf("	Caracateristici = %x\n", pSec->Characteristics);
+		printf("	Numele sectiuni = %.8s\n", pSec->Name);
+		printf("	VirtualSize = 0x%x\n", pSec->Misc.VirtualSize);
+		printf("	VirtualAddress = 0x%x\n", pSec->VirtualAddress);
+		printf("	SizeOfRawData = 0x%x\n", pSec->SizeOfRawData);
+		printf("	PointerToRawData = 0x%x\n", pSec->PointerToRawData);
+		printf("	PointerToRelocation = 0x%x\n", pSec->PointerToRelocations);
+		printf("	PointerToLinenumbers = 0x%x\n", pSec->PointerToLinenumbers);
+		printf("	NumberOfRelocations = 0x%x\n", pSec->NumberOfRelocations);
+		printf("	NumberOfLinenumbers = 0x%x\n", pSec->NumberOfLinenumbers);
+		printf("	Caracateristici = 0x%x\n", pSec->Characteristics);
 		pSec++;
 	}
 
 	//mutam pSec la prima sectiune
 	pSec -= nrSections;
 
+	DWORD FA = RVA2FA(pNt->OptionalHeader.AddressOfEntryPoint, pSec, nrSections);
+	if (FA != 0) {
+		printf("RVA2FA = 0x%x\n", FA);
+	}
+	else {
+		printf("RVA invalid\n");
+	}
+
+	pExD = (IMAGE_EXPORT_DIRECTORY*)(mf->data + RVA2FA(pNt->OptionalHeader.DataDirectory[0].VirtualAddress, pSec, nrSections));
+	
+
+
+	//DWORD dwIndexOfOrdinals = mf->data + RVA2FA(pExD->AddressOfFunctions, pSec, nrSections);
+	//DWORD dwIndexOfNameOrdinals = mf->data + RVA2FA(pExD->AddressOfNameOrdinals, pSec, nrSections);
+	BYTE *bIndexOfName = (BYTE*)(mf->data + RVA2FA(pExD->Name, pSec, nrSections));
+
+
+	//for (DWORD bIndex = 0; bIndex < pExD->NumberOfNames; bIndex++) {
+	printf("%s\n", bIndexOfName);
+
+
+	//}
+
+	
+	
+
+
 	return 0;
 }
+
+
+DWORD RVA2FA(DWORD RVA, IMAGE_SECTION_HEADER* pSec, BYTE nrSect) {
+	BYTE bIndex;
+
+	for (bIndex = 0; bIndex < nrSect; bIndex++, pSec++) {
+		if ((pSec->VirtualAddress <= RVA) && (pSec->VirtualAddress + pSec->Misc.VirtualSize > RVA)) {
+			break;
+		}
+	}
+
+	if (bIndex == nrSect) {
+		return 0;
+	}
+
+	DWORD delta = RVA - pSec->VirtualAddress;
+	return pSec->PointerToRawData + delta;
+}
+
+
+
+
 
 int main()
 {
 	MAPPED_FILE mf;
-	if (memoryMap("test1.exe", &mf) == 0) {
+	if (memoryMap("kernel32.dll", &mf) == 0) {
 		if (parsePeFile(&mf) != 0) {
 			printf("Eroare la parsare!\n");
 		}
