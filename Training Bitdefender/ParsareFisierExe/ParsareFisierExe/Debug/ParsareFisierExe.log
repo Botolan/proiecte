@@ -1,0 +1,3 @@
+﻿  main.c
+d:\facultate\training bitdefender\parsarefisierexe\parsarefisierexe\main.c(106): warning C4554: '&': check operator precedence for possible error; use parentheses to clarify precedence
+  ParsareFisierExe.vcxproj -> D:\Facultate\Training Bitdefender\ParsareFisierExe\Debug\ParsareFisierExe.exe
