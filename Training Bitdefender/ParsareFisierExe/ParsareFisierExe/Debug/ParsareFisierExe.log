@@ -1,5 +1,2 @@
 ﻿  main.c
-c:\proiecte\training bitdefender\parsarefisierexe\parsarefisierexe\main.c(145): warning C4244: 'function': conversion from 'WORD' to 'BYTE', possible loss of data
-c:\proiecte\training bitdefender\parsarefisierexe\parsarefisierexe\main.c(153): warning C4244: 'function': conversion from 'WORD' to 'BYTE', possible loss of data
-c:\proiecte\training bitdefender\parsarefisierexe\parsarefisierexe\main.c(159): warning C4244: 'function': conversion from 'WORD' to 'BYTE', possible loss of data
-  ParsareFisierExe.vcxproj -> C:\proiecte\Training Bitdefender\ParsareFisierExe\Debug\ParsareFisierExe.exe
+  ParsareFisierExe.vcxproj -> D:\Facultate\proiecte\Training Bitdefender\ParsareFisierExe\Debug\ParsareFisierExe.exe

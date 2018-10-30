@@ -2,7 +2,7 @@
 #include <windows.h>
 
 
-DWORD RVA2FA(DWORD RVA, IMAGE_SECTION_HEADER* pSec, BYTE nrSect);
+DWORD RVA2FA(DWORD RVA, IMAGE_SECTION_HEADER* pSec, WORD nrSect);
 
 
 typedef struct {
@@ -72,13 +72,46 @@ void memoryUnmap(MAPPED_FILE *mf) {
 	}
 }
 
+
+
+int getExportFunctions(MAPPED_FILE *mf, IMAGE_EXPORT_DIRECTORY* pExD, IMAGE_SECTION_HEADER* pSec, WORD nrSections) {
+	//pointer pentru adresele unde sa afla numele functiilor exportate
+	DWORD *pIndexOfName = NULL;
+	DWORD *pIndexOfFunctionAddress = NULL;
+	BYTE* bPointerToString = NULL;
+
+	DWORD dwNameAddress = 0;
+	DWORD dwFunctionAddress = 0;
+	DWORD dwFunctionOrdinal = 0;
+
+	pIndexOfName = (DWORD*)((DWORD)mf->data + RVA2FA(pExD->AddressOfNames, pSec, nrSections));
+	pIndexOfFunctionAddress = (DWORD*)((DWORD)mf->data + RVA2FA(pExD->AddressOfFunctions, pSec, nrSections));
+
+
+	for (DWORD dwIndex = 0; dwIndex < pExD->NumberOfNames; dwIndex++) {
+		//copiem valoarea adresei unde se gaseste numele functiei importate, utilizand dwNameAddress
+		memcpy(&dwNameAddress, pIndexOfName, 4);
+		memcpy(&dwFunctionAddress, pIndexOfFunctionAddress, 4);
+		//RVA2FA cu adresa copiata
+		bPointerToString = ((BYTE*)(DWORD)mf->data + RVA2FA(dwNameAddress, pSec, nrSections));
+		printf("0x%x %s\n", dwFunctionAddress, bPointerToString);
+		pIndexOfName++;
+		pIndexOfFunctionAddress++;
+	}
+
+	return 0;
+}
+
 int parsePeFile(MAPPED_FILE *mf) {
 	IMAGE_DOS_HEADER *pDos = NULL;
 	IMAGE_NT_HEADERS *pNt = NULL;
 	IMAGE_SECTION_HEADER *pSec = NULL;
 	IMAGE_EXPORT_DIRECTORY *pExD = NULL;
 	
-	BYTE nrSections;
+
+
+	WORD nrSections;
+
 
 	if (mf->fileSize < sizeof(IMAGE_DOS_HEADER)) {
 		printf("Fisier prea mic.\n");
@@ -107,16 +140,12 @@ int parsePeFile(MAPPED_FILE *mf) {
 		return -4;
 	}
 	nrSections = pNt->FileHeader.NumberOfSections;
-	printf("nrSections = %d\n", nrSections);
-	printf("characteristics = 0x%x\n", pNt->FileHeader.Characteristics);
 	if ((pNt->FileHeader.Characteristics & IMAGE_FILE_DLL) != 0) {
 		printf("E DLL.\n");
 	}
 	else {
 		printf("Nu e DLL.\n");
 	}
-	printf("ImageBase = 0x%x\n", pNt->OptionalHeader.ImageBase);
-	printf("EntryPoint = 0x%x\n", pNt->OptionalHeader.AddressOfEntryPoint);
 
 	pSec = (IMAGE_SECTION_HEADER*)(mf->data + pDos->e_lfanew + sizeof(IMAGE_NT_HEADERS));
 	if (pDos->e_lfanew + sizeof(IMAGE_NT_HEADERS) + (sizeof(IMAGE_SECTION_HEADER) * nrSections) > mf->fileSize) {
@@ -141,39 +170,14 @@ int parsePeFile(MAPPED_FILE *mf) {
 
 	//mutam pSec la prima sectiune
 	pSec -= nrSections;
-
-	DWORD FA = RVA2FA(pNt->OptionalHeader.AddressOfEntryPoint, pSec, nrSections);
-	if (FA != 0) {
-		printf("RVA2FA = 0x%x\n", FA);
-	}
-	else {
-		printf("RVA invalid\n");
-	}
-
-	pExD = (IMAGE_EXPORT_DIRECTORY*)(mf->data + RVA2FA(pNt->OptionalHeader.DataDirectory[0].VirtualAddress, pSec, nrSections));
-	
-
-
-	//DWORD dwIndexOfOrdinals = mf->data + RVA2FA(pExD->AddressOfFunctions, pSec, nrSections);
-	//DWORD dwIndexOfNameOrdinals = mf->data + RVA2FA(pExD->AddressOfNameOrdinals, pSec, nrSections);
-	BYTE *bIndexOfName = (BYTE*)(mf->data + RVA2FA(pExD->Name, pSec, nrSections));
-
-
-	//for (DWORD bIndex = 0; bIndex < pExD->NumberOfNames; bIndex++) {
-	printf("%s\n", bIndexOfName);
-
-
-	//}
-
-	
-	
-
+	pExD = (IMAGE_EXPORT_DIRECTORY*)((DWORD)mf->data + RVA2FA(pNt->OptionalHeader.DataDirectory[0].VirtualAddress, pSec, nrSections));
+	getExportFunctions(mf, pExD, pSec, nrSections);
 
 	return 0;
 }
 
 
-DWORD RVA2FA(DWORD RVA, IMAGE_SECTION_HEADER* pSec, BYTE nrSect) {
+DWORD RVA2FA(DWORD RVA, IMAGE_SECTION_HEADER* pSec, WORD nrSect) {
 	BYTE bIndex;
 
 	for (bIndex = 0; bIndex < nrSect; bIndex++, pSec++) {
