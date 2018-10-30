@@ -75,28 +75,31 @@ void memoryUnmap(MAPPED_FILE *mf) {
 
 
 int getExportFunctions(MAPPED_FILE *mf, IMAGE_EXPORT_DIRECTORY* pExD, IMAGE_SECTION_HEADER* pSec, WORD nrSections) {
-	//pointer pentru adresele unde sa afla numele functiilor exportate
 	DWORD *pIndexOfName = NULL;
 	DWORD *pIndexOfFunctionAddress = NULL;
+	WORD *pIndexOfOrdinal = NULL;
 	BYTE* bPointerToString = NULL;
 
 	DWORD dwNameAddress = 0;
 	DWORD dwFunctionAddress = 0;
-	DWORD dwFunctionOrdinal = 0;
+	WORD dwFunctionNameOrdinal = 0;
 
 	pIndexOfName = (DWORD*)((DWORD)mf->data + RVA2FA(pExD->AddressOfNames, pSec, nrSections));
 	pIndexOfFunctionAddress = (DWORD*)((DWORD)mf->data + RVA2FA(pExD->AddressOfFunctions, pSec, nrSections));
-
+	pIndexOfOrdinal = (WORD*)((DWORD)mf->data + RVA2FA(pExD->AddressOfNameOrdinals, pSec, nrSections));
 
 	for (DWORD dwIndex = 0; dwIndex < pExD->NumberOfNames; dwIndex++) {
-		//copiem valoarea adresei unde se gaseste numele functiei importate, utilizand dwNameAddress
 		memcpy(&dwNameAddress, pIndexOfName, 4);
 		memcpy(&dwFunctionAddress, pIndexOfFunctionAddress, 4);
-		//RVA2FA cu adresa copiata
+		memcpy(&dwFunctionNameOrdinal, pIndexOfOrdinal, 2);
+
 		bPointerToString = ((BYTE*)(DWORD)mf->data + RVA2FA(dwNameAddress, pSec, nrSections));
-		printf("0x%x %s\n", dwFunctionAddress, bPointerToString);
+
+		printf("Adresa functiei = 0x%x, Numele functiei = %s, Ordinalul functiei = 0x%x\n", dwFunctionAddress, bPointerToString, dwFunctionNameOrdinal);
+
 		pIndexOfName++;
 		pIndexOfFunctionAddress++;
+		pIndexOfOrdinal++;
 	}
 
 	return 0;
