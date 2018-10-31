@@ -1,8 +1,7 @@
 #include <stdio.h>
 #include <windows.h>
+#include <string.h>
 
-
-DWORD RVA2FA(DWORD RVA, IMAGE_SECTION_HEADER* pSec, WORD nrSect);
 
 
 typedef struct {
@@ -11,6 +10,14 @@ typedef struct {
 	BYTE *data;
 	DWORD fileSize;
 }MAPPED_FILE;
+
+DWORD RVA2FA(DWORD RVA, IMAGE_SECTION_HEADER* pSec, WORD nrSect);
+int memoryMap(const char *fileName, MAPPED_FILE *mf);
+int getExportFunctions(MAPPED_FILE *mf, IMAGE_EXPORT_DIRECTORY* pExD, IMAGE_SECTION_HEADER* pSec, WORD nrSections);
+int getImports(MAPPED_FILE *mf, IMAGE_IMPORT_DESCRIPTOR* pImp, IMAGE_SECTION_HEADER* pSec, WORD nrSections);
+int parsePeFile(MAPPED_FILE *mf);
+int loadFile(char* path);
+void traverseDirectory(char* path);
 
 int memoryMap(const char *fileName, MAPPED_FILE *mf)
 {
@@ -80,37 +87,53 @@ int getExportFunctions(MAPPED_FILE *mf, IMAGE_EXPORT_DIRECTORY* pExD, IMAGE_SECT
 	WORD *pIndexOfOrdinal = NULL;
 	BYTE* bPointerToString = NULL;
 
-	DWORD dwNameAddress = 0;
-	DWORD dwFunctionAddress = 0;
-	WORD dwFunctionNameOrdinal = 0;
+	printf("Exporturi----------------\n");
 
+	//adresele numelor functiilor
 	pIndexOfName = (DWORD*)((DWORD)mf->data + RVA2FA(pExD->AddressOfNames, pSec, nrSections));
+	//adresele functiilor
 	pIndexOfFunctionAddress = (DWORD*)((DWORD)mf->data + RVA2FA(pExD->AddressOfFunctions, pSec, nrSections));
+	//ordinalele functiilor
 	pIndexOfOrdinal = (WORD*)((DWORD)mf->data + RVA2FA(pExD->AddressOfNameOrdinals, pSec, nrSections));
 
-	for (DWORD dwIndex = 0; dwIndex < pExD->NumberOfNames; dwIndex++) {
-		memcpy(&dwNameAddress, pIndexOfName, 4);
-		memcpy(&dwFunctionAddress, pIndexOfFunctionAddress, 4);
-		memcpy(&dwFunctionNameOrdinal, pIndexOfOrdinal, 2);
 
-		bPointerToString = ((BYTE*)(DWORD)mf->data + RVA2FA(dwNameAddress, pSec, nrSections));
-
-		printf("Adresa functiei = 0x%x, Numele functiei = %s, Ordinalul functiei = 0x%x\n", dwFunctionAddress, bPointerToString, dwFunctionNameOrdinal);
-
-		pIndexOfName++;
-		pIndexOfFunctionAddress++;
-		pIndexOfOrdinal++;
+	for (DWORD dwIndex = 0; dwIndex < pExD->NumberOfFunctions; dwIndex++) {
+		//facem RVA2FA pe adresa la care se afla numele
+		bPointerToString = ((BYTE*)(DWORD)mf->data + RVA2FA(pIndexOfName[pIndexOfOrdinal[dwIndex]], pSec, nrSections));
+		printf("Adresa functiei = 0x%x, Numele functiei = %s, Ordinalul functiei = 0x%x\n", pIndexOfFunctionAddress[dwIndex], bPointerToString, pIndexOfOrdinal[dwIndex]);
 	}
 
 	return 0;
 }
+
+
+int getImports(MAPPED_FILE *mf, IMAGE_IMPORT_DESCRIPTOR* pImp, IMAGE_SECTION_HEADER* pSec, WORD nrSections) {
+	printf("Importuri----------------\n");
+	while ((void*)pImp->Name != NULL) {
+		//numele fisierului de unde se importa
+		printf("%s\n", (BYTE*)(mf->data + RVA2FA(pImp->Name, pSec, nrSections)));
+		//adresa la care se afla prima informatie despre ce importa
+		PIMAGE_THUNK_DATA thunk = (PIMAGE_THUNK_DATA)((DWORD)mf->data + RVA2FA(pImp->FirstThunk, pSec, nrSections));
+		//cat timp este diferit de NULL inseamna ca importam
+		while ((void*)thunk->u1.AddressOfData != NULL) {
+			//numele luat prin RVA2FA
+			IMAGE_IMPORT_BY_NAME *NameAddress = (IMAGE_IMPORT_BY_NAME*)((DWORD)mf->data + RVA2FA(thunk->u1.AddressOfData, pSec, nrSections));
+			printf("	%s\n", NameAddress->Name);
+			thunk++;
+		}
+		pImp++;
+	}
+	return 0;
+}
+
+
 
 int parsePeFile(MAPPED_FILE *mf) {
 	IMAGE_DOS_HEADER *pDos = NULL;
 	IMAGE_NT_HEADERS *pNt = NULL;
 	IMAGE_SECTION_HEADER *pSec = NULL;
 	IMAGE_EXPORT_DIRECTORY *pExD = NULL;
-	
+	IMAGE_IMPORT_DESCRIPTOR *pImp = NULL;
 
 
 	WORD nrSections;
@@ -173,8 +196,22 @@ int parsePeFile(MAPPED_FILE *mf) {
 
 	//mutam pSec la prima sectiune
 	pSec -= nrSections;
-	pExD = (IMAGE_EXPORT_DIRECTORY*)((DWORD)mf->data + RVA2FA(pNt->OptionalHeader.DataDirectory[0].VirtualAddress, pSec, nrSections));
-	getExportFunctions(mf, pExD, pSec, nrSections);
+
+	if ((void*)pNt->OptionalHeader.DataDirectory[0].VirtualAddress == NULL) {
+		printf("Fisierul nu are exporturi!\n");
+	}
+	else {
+		pExD = (IMAGE_EXPORT_DIRECTORY*)((DWORD)mf->data + RVA2FA(pNt->OptionalHeader.DataDirectory[0].VirtualAddress, pSec, nrSections));
+		getExportFunctions(mf, pExD, pSec, nrSections);
+	}
+
+	if ((void*)pNt->OptionalHeader.DataDirectory[1].VirtualAddress == NULL) {
+		printf("Fisierul nu are importuri!\n");
+	}
+	else {
+		pImp = (IMAGE_IMPORT_DESCRIPTOR*)((DWORD)mf->data + RVA2FA(pNt->OptionalHeader.DataDirectory[1].VirtualAddress, pSec, nrSections));
+		getImports(mf, pImp, pSec, nrSections);
+	}
 
 	return 0;
 }
@@ -197,21 +234,58 @@ DWORD RVA2FA(DWORD RVA, IMAGE_SECTION_HEADER* pSec, WORD nrSect) {
 	return pSec->PointerToRawData + delta;
 }
 
+void traverseDirectory(char* path) {
+	WIN32_FIND_DATAA data;
+	HANDLE hFind;
 
+
+	hFind = FindFirstFileA(path, &data);
+
+	if (hFind == INVALID_HANDLE_VALUE) {
+		printf("Eroare la deschidere fisier!\n");
+		return;
+	}
+
+	while (FindNextFileA(hFind, &data)) {
+		if (strcmp(data.cFileName, "..") != 0 && strcmp(data.cFileName, ".") != 0) {
+			BYTE *newPath = (BYTE*)calloc(512, 1);
+			memcpy(newPath, path, strlen(path) - 1);
+			strcat_s(newPath, 512, data.cFileName);
+			if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+				strcat_s(newPath, 512, "\\*");
+				traverseDirectory(newPath);
+			}
+			else {
+				printf("Analiza pentru fisierul %s\n", newPath);
+				if (loadFile(newPath) != 0) {
+					printf("Fisierul nu a putut fi analizat!\n");
+				}
+			}
+		}
+	}
+}
+
+int loadFile(char* path) {
+	MAPPED_FILE mf;
+	if (memoryMap(path, &mf) == 0) {
+		if (parsePeFile(&mf) != 0) {
+			printf("Eroare la parsare!\n");
+			return -1;
+		}
+	}
+	else {
+		printf("Eroare la mapare: %d.\n", GetLastError());
+		return -2;
+	}
+	memoryUnmap(&mf);
+	return 0;
+}
 
 
 
 int main()
 {
-	MAPPED_FILE mf;
-	if (memoryMap("kernel32.dll", &mf) == 0) {
-		if (parsePeFile(&mf) != 0) {
-			printf("Eroare la parsare!\n");
-		}
-	}
-	else {
-		printf("Eroare la mapare: %d.\n", GetLastError());
-	}
-	memoryUnmap(&mf);
+	char a[] = "D:\\Facultate\\proiecte\\Training Bitdefender\\FolderTest\\*";
+	traverseDirectory(a);
 	return 0;
 }
